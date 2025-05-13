@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
+import org.springframework.cloud.client.loadbalancer.LoadBalancerClient;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -23,9 +24,12 @@ public class OrderServiceImpl implements OrderService {
     @Autowired
     RestTemplate restTemplate;
 
+    @Autowired
+    LoadBalancerClient loadBalancerClient; // 需要导入spring-cloud-starter-loadbalancer
+
     @Override
     public Order createOrder(Long productID, Long userId) {
-        Product product = getProductFromRemote(productID);
+        Product product = getProductFromRemoteWithLoaderBalance(productID);
         Order order = new Order();
         order.setId(1L);
         order.setTotalAmount(product.getPrice().multiply(new BigDecimal(product.getNum())));
@@ -42,6 +46,15 @@ public class OrderServiceImpl implements OrderService {
         ServiceInstance serviceInstance = instances.get(0);
         //远程Url http://localhost:9000/product/999
         String url = "http://"+serviceInstance.getHost() + ":" + serviceInstance.getPort() +"/product/" + productId;
+        log.info("远程请求路径：{}",url);
+        Product product = restTemplate.getForObject(url, Product.class);
+        return product;
+    }
+
+    private Product getProductFromRemoteWithLoaderBalance(Long productId){
+        ServiceInstance choose = loadBalancerClient.choose("service-product");
+        //远程Url http://localhost:9000/product/999
+        String url = "http://"+choose.getHost() + ":" + choose.getPort() +"/product/" + productId;
         log.info("远程请求路径：{}",url);
         Product product = restTemplate.getForObject(url, Product.class);
         return product;
